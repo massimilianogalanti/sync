@@ -21,7 +21,7 @@ class Server extends AbstractSync {
 			$response = array('error' => $response);
 		}
 
-		header('Content-type: application/json');
+		header('Content-Type: application/json');
 		echo json_encode($response);
 	}
 
@@ -55,6 +55,12 @@ class Server extends AbstractSync {
 				foreach ($localFiles as $filePath => $info) {
 					if (empty($remoteFiles[$filePath]) || $remoteFiles[$filePath] != $info) {
 						$updatedFiles[$filePath] = $info;
+					}
+				}
+
+				foreach ($remoteFiles as $filePath => $info) {
+					if (empty($localFiles[$filePath])) {
+						$updatedFiles[$filePath] = null;
 					}
 				}
 

@@ -23,6 +23,7 @@ class Client extends AbstractSync {
 
 		//send client file list to server
 		$localFiles = $this->getFileList($this->path);
+
 		$request = array(
 			'action' => self::ACTION_FILELIST,
 			'data' => $localFiles
@@ -36,24 +37,30 @@ class Client extends AbstractSync {
 
 		//process modified files
 		foreach ($response['data'] as $relativePath => $info) {
-			//fetch file contents
-			$response = $this->post(array(
-				'action' => self::ACTION_FETCH,
-				'file' => $relativePath
-			));
-
-			//save file
 			$absolutePath = $this->path . $relativePath;
-			if (!file_exists(dirname($absolutePath))) {
-				mkdir(dirname($absolutePath), 0777, true);
+
+			if (empty($info)) {
+				//remove file
+				unlink($absolutePath);
+			} else {
+				//fetch file contents
+				$response = $this->post(array(
+					'action' => self::ACTION_FETCH,
+					'file' => $relativePath
+				));
+
+				//save file
+				if (!file_exists(dirname($absolutePath))) {
+					mkdir(dirname($absolutePath), 0777, true);
+				}
+				file_put_contents($absolutePath, $response);
+
+				//update modified time to match server
+				touch($absolutePath, $info['timestamp']);
+
+				//update permissions to match server
+				chmod($absolutePath, octdec(intval($info['fileperm'])));
 			}
-			file_put_contents($absolutePath, $response);
-
-			//update modified time to match server
-			touch($absolutePath, $info['timestamp']);
-
-			//update permissions to match server
-			chmod($absolutePath, octdec(intval($info['fileperm'])));
 		}
 	}
 
@@ -63,7 +70,6 @@ class Client extends AbstractSync {
 	 * @throws \RuntimeException
 	 */
 	protected function post($data) {
-
 		$data['key'] = $this->key;
 
 		curl_setopt($this->curl, CURLOPT_RETURNTRANSFER, 1);
@@ -72,13 +78,17 @@ class Client extends AbstractSync {
 		curl_setopt($this->curl, CURLOPT_POSTFIELDS, json_encode($data));
 		curl_setopt($this->curl, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
 
-		list($headers, $body) = explode("\r\n\r\n", curl_exec($this->curl), 2);
+		$response = curl_exec($this->curl);
+		$header_size = curl_getinfo($this->curl, CURLINFO_HEADER_SIZE);
+		$headers = substr($response, 0, $header_size);
+		$body = substr( $response, $header_size );
 		$code = curl_getinfo($this->curl, CURLINFO_HTTP_CODE);
+
 		if ($code != 200) {
 			throw new \RuntimeException('HTTP error: '.$code);
 		}
 
-		if (stripos($headers, 'Content-type: application/json') !== false) {
+		if (stripos($headers, 'Content-Type: application/json') !== false) {
 			$body = json_decode($body, 1);
 		}
 
